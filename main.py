@@ -1,0 +1,94 @@
+import os
+from flask import Flask, request, jsonify, send_file, url_for
+from werkzeug.utils import secure_filename
+from gtts import gTTS
+import speech_recognition as sr
+from deep_translator import GoogleTranslator
+from google.transliteration import transliterate_text
+
+app = Flask(__name__)
+app.config["UPLOAD_FOLDER"] = "uploads"
+os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
+
+recognizer = sr.Recognizer()
+
+language_codes = {
+    "en": "English",
+    "ja": "Japanese",
+    "ko": "Korean",
+    "zh-CN": "Chinese (Simplified)",
+    "fr": "French",
+    "ru": "Russian",
+    "de": "German",
+    "es": "Spanish",
+}
+
+
+@app.route("/translate", methods=["POST"])
+def translate():
+    input_lang = request.form.get("input_lang", "ja")
+    output_lang = request.form.get("output_lang", "en")
+
+    if input_lang not in language_codes or output_lang not in language_codes:
+        return jsonify({"error": "Invalid language code"}), 400
+
+    if "file" not in request.files:
+        return jsonify({"error": "No file part"}), 400
+
+    file = request.files["file"]
+
+    if file.filename == "":
+        return jsonify({"error": "No selected file"}), 400
+
+    if file:
+        filename = secure_filename(file.filename)
+        file_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
+        file.save(file_path)
+
+        try:
+            with sr.AudioFile(file_path) as source:
+                audio = recognizer.record(source)
+                speech_text = recognizer.recognize_google(audio, language=input_lang)
+                speech_text_transliteration = (
+                    transliterate_text(speech_text, lang_code=input_lang)
+                    if input_lang not in ("auto", "en")
+                    else speech_text
+                )
+                translated_text = GoogleTranslator(
+                    source=input_lang, target=output_lang
+                ).translate(text=speech_text_transliteration)
+
+                # Generate speech from the translated text
+                tts = gTTS(translated_text, lang=output_lang)
+                audio_output_filename = f"translated_{filename}.mp3"
+                audio_output_path = os.path.join(
+                    app.config["UPLOAD_FOLDER"], audio_output_filename
+                )
+                tts.save(audio_output_path)
+
+                response = {
+                    "recognized_text": speech_text_transliteration,
+                    "translated_text": translated_text,
+                    "audio_file_url": url_for(
+                        "download_file", filename=audio_output_filename, _external=True
+                    ),
+                }
+
+                return jsonify(response)
+        except sr.UnknownValueError:
+            return jsonify({"error": "Could not understand the audio!"}), 400
+        except sr.RequestError:
+            return jsonify({"error": "Could not request results from Google!"}), 500
+        finally:
+            os.remove(file_path)
+
+
+@app.route("/uploads/<filename>")
+def download_file(filename):
+    return send_file(
+        os.path.join(app.config["UPLOAD_FOLDER"], filename), as_attachment=True
+    )
+
+
+if __name__ == "__main__":
+    app.run(debug=True)

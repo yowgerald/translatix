@@ -1,0 +1,6 @@
+gTTS==2.5.1
+deep-translator==1.11.4
+SpeechRecognition==3.10.4
+google-transliteration-api==1.0.3
+Flask==3.0.3
+flask-socketio==5.3.6
