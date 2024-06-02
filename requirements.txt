@@ -4,3 +4,4 @@ SpeechRecognition==3.10.4
 google-transliteration-api==1.0.3
 Flask==3.0.3
 flask-socketio==5.3.6
+TTS

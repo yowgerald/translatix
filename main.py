@@ -1,14 +1,21 @@
 import os
+import uuid
 from flask import Flask, request, jsonify, send_file, url_for
 from werkzeug.utils import secure_filename
 from gtts import gTTS
 import speech_recognition as sr
 from deep_translator import GoogleTranslator
 from google.transliteration import transliterate_text
+import torch
+from TTS.api import TTS
+
 
 app = Flask(__name__)
 app.config["UPLOAD_FOLDER"] = "uploads"
 os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
+
+device = "cuda" if torch.cuda.is_available() else "cpu"
+tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2").to(device)
 
 recognizer = sr.Recognizer()
 
@@ -59,18 +66,29 @@ def translate():
                 ).translate(text=speech_text_transliteration)
 
                 # Generate speech from the translated text
-                tts = gTTS(translated_text, lang=output_lang)
-                audio_output_filename = f"translated_{filename}.mp3"
+                gtts = gTTS(translated_text, lang=output_lang)
+                audio_output_filename = f"translated_{str(uuid.uuid4())}.mp3"
+                clone_output_filename = f"cloned_{str(uuid.uuid4())}.mp3"
                 audio_output_path = os.path.join(
                     app.config["UPLOAD_FOLDER"], audio_output_filename
                 )
-                tts.save(audio_output_path)
+                gtts.save(audio_output_path)
+
+                # TTS
+                tts.tts_to_file(
+                    text=translated_text,
+                    speaker_wav=file_path,
+                    language="en",
+                    file_path=os.path.join(
+                        app.config["UPLOAD_FOLDER"], clone_output_filename
+                    ),
+                )
 
                 response = {
                     "recognized_text": speech_text_transliteration,
                     "translated_text": translated_text,
                     "audio_file_url": url_for(
-                        "download_file", filename=audio_output_filename, _external=True
+                        "download_file", filename=clone_output_filename, _external=True
                     ),
                 }
 
