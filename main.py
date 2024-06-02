@@ -2,20 +2,22 @@ import os
 import uuid
 from flask import Flask, request, jsonify, send_file, url_for
 from werkzeug.utils import secure_filename
-from gtts import gTTS
 import speech_recognition as sr
 from deep_translator import GoogleTranslator
 from google.transliteration import transliterate_text
 import torch
 from TTS.api import TTS
+from df.enhance import enhance, init_df, load_audio, save_audio
 
 
 app = Flask(__name__)
-app.config["UPLOAD_FOLDER"] = "uploads"
-os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
+app.config["STORAGE_FOLDER"] = "storage"
+os.makedirs(app.config["STORAGE_FOLDER"], exist_ok=True)
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
-tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2").to(device)
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+TTS_MODEL = "tts_models/multilingual/multi-dataset/xtts_v2"
+
+df_model, df_state, _ = init_df()
 
 recognizer = sr.Recognizer()
 
@@ -49,8 +51,16 @@ def translate():
 
     if file:
         filename = secure_filename(file.filename)
-        file_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
+        file_path = os.path.join(app.config["STORAGE_FOLDER"], filename)
         file.save(file_path)
+
+        # deep filter
+        audio, _ = load_audio(file_path, sr=df_state.sr())
+        enhanced = enhance(df_model, df_state, audio)
+        enhanced_output_path = os.path.join(
+            app.config["STORAGE_FOLDER"], f"enhanced_{str(uuid.uuid4())}.wav"
+        )
+        save_audio(enhanced_output_path, enhanced, df_state.sr())
 
         try:
             with sr.AudioFile(file_path) as source:
@@ -65,23 +75,17 @@ def translate():
                     source=input_lang, target=output_lang
                 ).translate(text=speech_text_transliteration)
 
-                # Generate speech from the translated text
-                gtts = gTTS(translated_text, lang=output_lang)
-                audio_output_filename = f"translated_{str(uuid.uuid4())}.mp3"
-                clone_output_filename = f"cloned_{str(uuid.uuid4())}.mp3"
-                audio_output_path = os.path.join(
-                    app.config["UPLOAD_FOLDER"], audio_output_filename
-                )
-                gtts.save(audio_output_path)
-
                 # TTS
+                clone_output_filename = f"cloned_{str(uuid.uuid4())}.mp3"
+                clone_output_path = os.path.join(
+                    app.config["STORAGE_FOLDER"], clone_output_filename
+                )
+                tts = TTS(TTS_MODEL).to(DEVICE)
                 tts.tts_to_file(
                     text=translated_text,
-                    speaker_wav=file_path,
+                    speaker_wav=enhanced_output_path,
                     language="en",
-                    file_path=os.path.join(
-                        app.config["UPLOAD_FOLDER"], clone_output_filename
-                    ),
+                    file_path=clone_output_path,
                 )
 
                 response = {
@@ -104,7 +108,7 @@ def translate():
 @app.route("/uploads/<filename>")
 def download_file(filename):
     return send_file(
-        os.path.join(app.config["UPLOAD_FOLDER"], filename), as_attachment=True
+        os.path.join(app.config["STORAGE_FOLDER"], filename), as_attachment=True
     )
 
 
