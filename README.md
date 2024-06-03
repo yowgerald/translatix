@@ -8,10 +8,9 @@ https://github.com/binxio/piper-voice-cloning
 
 https://github.com/timsainb/noisereduce
 
+https://github.com/suno-ai/bark
+
 ## TODOs:
 - Try another repos
 - Convert any file to wav?
 - Clean the audio first
-
-
-/Library/ApplicationSupport/tts

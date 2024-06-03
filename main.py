@@ -7,7 +7,6 @@ from deep_translator import GoogleTranslator
 from google.transliteration import transliterate_text
 import torch
 from TTS.api import TTS
-from df.enhance import enhance, init_df, load_audio, save_audio
 
 
 app = Flask(__name__)
@@ -16,8 +15,6 @@ os.makedirs(app.config["STORAGE_FOLDER"], exist_ok=True)
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 TTS_MODEL = "tts_models/multilingual/multi-dataset/xtts_v2"
-
-df_model, df_state, _ = init_df()
 
 recognizer = sr.Recognizer()
 
@@ -54,14 +51,6 @@ def translate():
         file_path = os.path.join(app.config["STORAGE_FOLDER"], filename)
         file.save(file_path)
 
-        # deep filter
-        audio, _ = load_audio(file_path, sr=df_state.sr())
-        enhanced = enhance(df_model, df_state, audio)
-        enhanced_output_path = os.path.join(
-            app.config["STORAGE_FOLDER"], f"enhanced_{str(uuid.uuid4())}.wav"
-        )
-        save_audio(enhanced_output_path, enhanced, df_state.sr())
-
         try:
             with sr.AudioFile(file_path) as source:
                 audio = recognizer.record(source)
@@ -83,7 +72,7 @@ def translate():
                 tts = TTS(TTS_MODEL).to(DEVICE)
                 tts.tts_to_file(
                     text=translated_text,
-                    speaker_wav=enhanced_output_path,
+                    speaker_wav=file_path,
                     language="en",
                     file_path=clone_output_path,
                 )
