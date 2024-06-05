@@ -14,3 +14,6 @@ https://github.com/suno-ai/bark
 - Try another repos
 - Convert any file to wav?
 - Clean the audio first
+
+## Colab Notebooks:
+- [translatix](https://colab.research.google.com/drive/1NKgWkxNrJELwa23yCjO6NGLm7FbLdFki?usp=sharing)
